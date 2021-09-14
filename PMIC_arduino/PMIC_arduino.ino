@@ -9,8 +9,6 @@
 //#define other_half
 
 #include <Wire.h>
-//Git info das dsa dsa dsa  sa
-#define blabla 1
 #define IRPS5401_ADDR1  (0x43)
 #define IRPS5401_ADDR2  (0x44)
 #define IRPS38060_ADDR  (0x45) // Não usado
