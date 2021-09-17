@@ -1,18 +1,21 @@
 //#define check_outputs_config 0
 //#define check_device_config 1
-#define check_output 2
-//#define change_output 3
+//#define check_output 2
+//#define other_half 3
 //#define check_status_init 5
-#define important_pins_only 6
+//#define important_pins 6
 //#define non_important_pins_only 7
 //#define check_prints_clean 8
-//#define other_half
+//#define important_pins_only 9
+#define routine 10
 
 #include <Wire.h>
-//Adicionar coisas ++++
+
 #define IRPS5401_ADDR1  (0x43)
 #define IRPS5401_ADDR2  (0x44)
 #define IRPS38060_ADDR  (0x45) // Não usado
+
+#define default_voltage 218
 
 // ************************************************************************************************************************** //
 // *************** Registos e pequena orientação **************************************************************************** //
@@ -186,19 +189,9 @@ const char* OnOffConfigs_Strings[] = { "Turn Off with delay", "Turn Off",
 class IRPS5401{
 private:
   uint8_t irps5401_i2caddr;
-  int8_t voutModeExponent;
-  float iOut[5];
-  float iIn[5];
-  float vOut[5];
-  float vIn[5];
-  float pOut[5];
-  float pIn[5];
-  float pOutAux[5];
-  float pInAux[5];
-  float pOutTotal;
-  float pOutTotalAux;
-  float pInTotal; 
-  float pInTotalAux;
+  int8_t voutModeExponent;;
+  float pV;
+  float pI;
 public:
   IRPS5401(uint8_t addr = IRPS5401_ADDR1);
 // i2c
@@ -216,56 +209,55 @@ public:
       float r = 0.0;
       wireReadWord(READ_VIN, &r_data16);
       r=linearDataFormat11(r_data16);
-      vIn[page]=r;
+      pV=r;
       return r;
   }
+  
   float getIIN(uint8_t page) {    
       uint16_t r_data16 = 0;
       float r = 0.0;
       wireReadWord(READ_IIN, &r_data16);
-      r = linearDataFormat11(r_data16);    
-      iIn[page]=r;
+      r = linearDataFormat11(r_data16);
+      pI=r;  
       return r;
   }
+  
   float getPIN(uint8_t page) {  
       uint16_t r_data16 = 0;
       float r = 0.0;
       wireReadWord(READ_PIN, &r_data16);
-      r = linearDataFormat11(r_data16);    
-      pIn[page]=r;
+      r = linearDataFormat11(r_data16); 
       return r;
   }
+  
   float getVOUT(uint8_t page) {
       uint16_t r_data16 = 0;
       float r = 0.0;
       wireReadWord(READ_VOUT, &r_data16); 
       r= r_data16*(pow(2,voutModeExponent));
-      vOut[page]=r;
+      pV=r;
       return r;
   }
+  
   float getIOUT(uint8_t page){
     uint16_t r_data16 = 0;
     float r = 0.0;
     wireReadWord(READ_IOUT, &r_data16);
     r=linearDataFormat11(r_data16);
-    iOut[page]=r;   
+    pI=r;
     return r;    
   }
+  
   float getPOUT(uint8_t page){
     uint16_t r_data16 = 0;
     float r = 0.0;    
     wireReadWord(READ_POUT, &r_data16);      
     r=linearDataFormat11(r_data16);
-    pOut[page]=r;
     return r;    
   }
-  float getPOUT_Total() {
-    int i;
-    pOutTotal=0.0;
-    for(i = 0; i < 5; i++) {
-      pOutTotal += pOut[i];
-    }
-    return pOutTotal;        
+
+  float getPCalculated(uint8_t page) {
+     return pI*pV;
   }
 
   void changePage(uint8_t page_n = 0x00){
@@ -643,22 +635,20 @@ void setup() {
   Serial.print("STATUS_TEMPERATURE REG_2:   "); Serial.println(r_data8B[5],BIN);    
   
 #endif ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-}
 
-void loop() {  
-  
+#if defined(check_outputs_config) || defined(other_half) || defined(check_output)
   uint8_t r_data8=0;
   uint8_t r_dataB[6], p;
   uint16_t r_data16=0;
   uint16_t temp;
   float tmp=0.0;
   uint16_t r_data16_signed=0;
+  pinMode(A0, INPUT) ;
 
-  
   for(p = 0; p < 5; p++) 
   {
 
-#if defined(important_pins_only) //////////////////////////////////////////////////////////////////////////////////////////////////////////
+#if defined(important_pins) //////////////////////////////////////////////////////////////////////////////////////////////////////////
  
     if(p != 1 && p != 3){
       continue;
@@ -936,8 +926,9 @@ void loop() {
 #endif /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(check_output) //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#if !defined(important_pins_only)    
     tmp = REG1.getVIN(p);  
-    Serial.print("VIN: "); Serial.print(tmp,5); Serial.print ("V  ");
+    Serial.print("REG1-> VIN: "); Serial.print(tmp,5); Serial.print ("V  ");
 
     // O consumo de corrente nao e possivel ver no LDO.
     if(p!=4){
@@ -947,9 +938,10 @@ void loop() {
     
     tmp = REG1.getPIN(p);
     Serial.print("PIN: "); Serial.print(tmp,5);Serial.print("W  ");
-
-    tmp = REG1.getPIN(p);
-    Serial.print("PIN: "); Serial.print(tmp,5);Serial.print("W  ");
+    if(p!=4){
+    tmp = REG1.getPCalculated(p);
+    Serial.print("Pin Calculated: "); Serial.print(tmp,5);Serial.print("W  ");
+    }
       
     tmp = REG1.getVOUT(p);
     Serial.print("VOUT: "); Serial.print(tmp,5);Serial.print ("V  ");
@@ -959,25 +951,32 @@ void loop() {
     
     tmp = REG1.getPOUT(p);
     Serial.print("POUT: "); Serial.print(tmp,5);Serial.print ("W  ");
-
+    if(p!=4){
+    tmp = REG1.getPCalculated(p);
+    Serial.print("Pout Calculated: "); Serial.print(tmp,5);Serial.print("W  ");
+    }
+    
     REG1.wireReadWord(READ_TEMPERATURE_1, &r_data16);
     Serial.print("READ_TEMPERATURE_1:   "); Serial.print(r_data16 & 0X7ff);   Serial.println("ºC");
+#endif
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
 
     tmp = REG2.getVIN(p);  
-    Serial.print("VIN: "); Serial.print(tmp,5); Serial.print ("V  ");
+    Serial.print("REG2-> VIN: "); Serial.print(tmp,5); Serial.print ("V  ");
 
     // O consumo de corrente nao e possivel ver no LDO.
     if(p!=4){
       tmp = REG2.getIIN(p);
       Serial.print("IIN: "); Serial.print(tmp,5); Serial.print("A  ");
     }
-    
-    tmp = REG2.getPIN(p);
-    Serial.print("PIN: "); Serial.print(tmp,5);Serial.print("W  ");
 
     tmp = REG2.getPIN(p);
     Serial.print("PIN: "); Serial.print(tmp,5);Serial.print("W  ");
-      
+    if(p!=4){
+    tmp = REG2.getPCalculated(p);
+    Serial.print("Pin Calculated: "); Serial.print(tmp,5);Serial.print("W  ");
+    }
+    
     tmp = REG2.getVOUT(p);
     Serial.print("VOUT: "); Serial.print(tmp,5);Serial.print ("V  ");
     
@@ -986,25 +985,110 @@ void loop() {
     
     tmp = REG2.getPOUT(p);
     Serial.print("POUT: "); Serial.print(tmp,5);Serial.print ("W  ");
-
+    if(p!=4){
+    tmp = REG2.getPCalculated(p);
+    Serial.print("Pout Calculated: "); Serial.print(tmp,5);Serial.print("W  ");
+    }
+    
     REG2.wireReadWord(READ_TEMPERATURE_1, &r_data16);
     Serial.print("READ_TEMPERATURE_1:   "); Serial.print(r_data16 & 0X7ff);   Serial.println("ºC");
 
 #endif /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     
     Serial.println();
+  }
+#endif
+}
+
+uint8_t decrement=1;
+
+void loop() {  
+
+#if defined(routine)
+  uint16_t r_data16=0;
+  uint8_t r_data8=0;
+  float tmp;
+
+for(uint8_t p = 1; p < 4; p += 2){
+
+    Serial.println("Normal Voltage");
+    
+    REG2.changePage(p);
+    REG2.wireReadByte(PAGE, &r_data8);
+    if(r_data8==4)
+      Serial.print("LDO");
+    else
+      Serial.print("SW "); Serial.print(r_data8,DEC);Serial.println(" : ");
+      
+    r_data16=default_voltage;
+    REG2.wireWriteWord(VOUT_COMMAND, r_data16);
+
+    REG2.wireReadWord(VOUT_COMMAND, &r_data16);
+    tmp=REG1.linearDataFormat16(r_data16);
+    Serial.print("VOUT_COMMAND 1:   "); Serial.print(r_data16,HEX); Serial.print("h "); Serial.print(r_data16,DEC); Serial.print("d = "); Serial.print(tmp,5); Serial.println(" V");
+  
+    tmp = REG2.getVOUT(p);  
+    Serial.print("VOUT: "); Serial.print(tmp,5);Serial.print ("V  ");
+  
+    tmp = REG2.getPOUT(p);
+    Serial.print("POUT: "); Serial.print(tmp,5);Serial.print ("W  ");
+
+    Serial.println(); Serial.println();
 
   }
-/*
-#if defined(check_output) //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  
+  while(analogRead(A0)>0){}
+  delay(5000);
+  
+  for(uint8_t p = 1; p < 4; p += 2){
 
-  tmp = REG1.getPOUT_Total();
-  Serial.print("Total Pout by sum: "); Serial.print(tmp,8); Serial.println(" W"); 
+    Serial.println("Annormal Voltage");
+    
+    REG2.changePage(p);
+    REG2.wireReadByte(PAGE, &r_data8);
+    if(r_data8==4)
+      Serial.print("LDO");
+    else
+      Serial.print("SW "); Serial.print(r_data8,DEC);Serial.println(" : ");
 
-#endif /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-*/
-  delay(100);
-  while(analogRead(A0) < 1000){}
+    while(decrement>20){
+    }
+    
+    r_data16=default_voltage-decrement;
+    REG2.wireWriteWord(VOUT_COMMAND, r_data16);
+    
+    REG2.wireReadWord(VOUT_COMMAND, &r_data16);
+    tmp=REG1.linearDataFormat16(r_data16);
+    Serial.print("VOUT_COMMAND 1:   "); Serial.print(r_data16,HEX); Serial.print("h "); Serial.print(r_data16,DEC); Serial.print("d = "); Serial.print(tmp,5); Serial.println(" V");
+    
+    REG2.wireReadWord(VOUT_UV_WARN_LIMIT , &r_data16);
+    tmp=REG2.linearDataFormat16(r_data16);
+    Serial.print("VOUT_UV_WARN_LIMIT 2:   "); Serial.print(r_data16,HEX);Serial.print(" = "); Serial.print(tmp,5); Serial.println(" V");
+
+    REG2.wireReadWord(VOUT_UV_FAULT_LIMIT , &r_data16);
+    tmp=REG2.linearDataFormat16(r_data16);
+    Serial.print("VOUT_UV_FAULT_LIMIT 2:   "); Serial.print(r_data16,HEX);Serial.print(" = "); Serial.print(tmp,5); Serial.println(" V");
+    
+    REG2.wireReadByte(VOUT_UV_FAULT_RESPONSE , &r_data8);
+    Serial.print("VOUT_UV_FAULT_RESPONSE 2:   "); Serial.println(r_data8,HEX);
+    
+    tmp = REG2.getVOUT(p);
+    Serial.print("VOUT: "); Serial.print(tmp,5);Serial.print ("V  ");
+
+    tmp = REG2.getPOUT(p);
+    Serial.print("POUT: "); Serial.print(tmp,5);Serial.print ("W  ");
+
+    Serial.println(); Serial.println();
+  }
+
+  
+  while(analogRead(A0)<1023){}
+  delay(5000);
+
+  decrement++;
+  
+#endif
+  
 }
 
 // ****************************************************************************************************************************************** //
