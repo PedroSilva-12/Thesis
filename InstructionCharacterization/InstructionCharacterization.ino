@@ -25,7 +25,7 @@
 
 #define RESTORE_DEFAULT_ALL 0x12      // Poem o predefenido dos registos, existentes em memoria nao volatil (+)
 
-#define STORE_USER_ALL 0x15           // Guarda o que neste momento esta no registos
+#define STORE_USER_ALL 0x15           // Guarda o que neste momento esta no registos    
 
 #define RESTORE_USER_ALL 0x16         // Restora o que foi guardado como usiarios
 
@@ -547,6 +547,14 @@ void setup() {
   REG2.myVoutMode(&r_data8);   
 
   for(uint8_t p = 1; p < 4; p += 2){
+
+    REG2.changePage(p);
+    REG2.wireReadByte(PAGE, &r_data8);
+    if(r_data8==4)
+      Serial.print("LDO");
+    else
+      Serial.print("SW "); Serial.print(r_data8,DEC);Serial.println(" : ");
+      
     REG2.wireReadWord(VOUT_UV_WARN_LIMIT , &r_data16);
     tmp=REG2.linearDataFormat16(r_data16);
     Serial.print("VOUT_UV_WARN_LIMIT 2:   "); Serial.print(r_data16,HEX);Serial.print(" = "); Serial.print(tmp,5); Serial.println(" V");
@@ -557,6 +565,7 @@ void setup() {
     
     REG2.wireReadByte(VOUT_UV_FAULT_RESPONSE , &r_data8);
     Serial.print("VOUT_UV_FAULT_RESPONSE 2:   "); Serial.println(r_data8,HEX);
+    Serial.println();
   }
 
 }
